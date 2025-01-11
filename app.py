@@ -8,11 +8,12 @@ import logging
 import requests
 import json
 from datetime import datetime
+from functools import wraps
 
 class JSONFormatter(logging.Formatter):
     def format(self, record):
         log_obj = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now().isoformat(),
             "level": record.levelname,
             "message": record.getMessage(),
             "logger": record.name
@@ -51,6 +52,38 @@ PROXY_CONFIG = {
     "https": PROXY_URL
 }
 
+# Add this after loading environment variables
+API_KEY = os.getenv('API_KEY')
+if not API_KEY:
+    raise ValueError("API_KEY environment variable is required")
+
+def require_api_key(f):
+    @wraps(f)
+    async def decorated_function(*args, **kwargs):
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            logger.warning({
+                "event": "auth_missing",
+                "error": "No authorization header"
+            })
+            return jsonify({'error': 'No authorization header'}), 401
+            
+        try:
+            scheme, token = auth_header.split()
+            if scheme.lower() != 'bearer':
+                raise ValueError('Invalid authorization scheme')
+            if token != API_KEY:
+                raise ValueError('Invalid API key')
+        except Exception as e:
+            logger.warning({
+                "event": "auth_invalid",
+                "error": str(e)
+            })
+            return jsonify({'error': 'Invalid authorization'}), 401
+
+        return await f(*args, **kwargs)
+    return decorated_function
+
 def get_video_id(url):
     """Extract video ID from YouTube URL"""
     url = url.strip()
@@ -67,6 +100,7 @@ def get_video_id(url):
     raise ValueError("Could not extract video ID from URL")
 
 @app.route('/transcript', methods=['GET'])
+@require_api_key
 async def get_transcript():
     youtube_url = request.args.get('url')
     logger.info({
