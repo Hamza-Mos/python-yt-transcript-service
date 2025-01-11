@@ -104,7 +104,6 @@ async def get_transcript():
         
         return jsonify({
             'transcript': full_transcript,
-            'raw': transcript_parts
         })
     except ValueError as e:
         logger.warning({
