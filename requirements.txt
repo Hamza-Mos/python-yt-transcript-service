@@ -1,0 +1,6 @@
+quart==0.19.9
+quart-cors==0.7.0
+youtube-transcript-api==0.6.1
+hypercorn==0.15.0
+python-dotenv==1.0.1
+requests
