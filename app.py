@@ -51,10 +51,6 @@ PROXY_CONFIG = {
     "https": PROXY_URL
 }
 
-# Create a session with trust_env=False
-session = requests.Session()
-session.trust_env = False
-
 def get_video_id(url):
     """Extract video ID from YouTube URL"""
     url = url.strip()
@@ -96,7 +92,6 @@ async def get_transcript():
             YouTubeTranscriptApi.get_transcript,
             video_id,
             proxies=PROXY_CONFIG,
-            requests_session=session
         )
         
         full_transcript = ' '.join(part['text'] for part in transcript_parts)
