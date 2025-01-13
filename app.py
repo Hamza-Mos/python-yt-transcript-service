@@ -99,6 +99,65 @@ def get_video_id(url):
 
     raise ValueError("Could not extract video ID from URL")
 
+async def get_best_transcript(video_id, proxies=None):
+    """Get best available transcript with language fallbacks"""
+    try:
+        # Get list of available transcripts
+        transcript_list = await asyncio.to_thread(
+            YouTubeTranscriptApi.list_transcripts,
+            video_id,
+            proxies=proxies
+        )
+        
+        # Categorize available transcripts
+        manual_transcripts = []
+        generated_transcripts = []
+        
+        for transcript in transcript_list:
+            if transcript.is_generated:
+                generated_transcripts.append(transcript.language_code)
+            else:
+                manual_transcripts.append(transcript.language_code)
+        
+        # Preferred languages in order
+        preferred_languages = ['en', 'es', 'fr', 'de', 'ar']
+        
+        # First try manual transcripts
+        for lang in preferred_languages:
+            if lang in manual_transcripts:
+                transcript = transcript_list.find_manually_created_transcript([lang])
+                if lang != 'en':
+                    transcript = transcript.translate('en')
+                return await asyncio.to_thread(transcript.fetch)
+        
+        # Then try generated transcripts
+        for lang in preferred_languages:
+            if lang in generated_transcripts:
+                transcript = transcript_list.find_generated_transcript([lang])
+                if lang != 'en':
+                    transcript = transcript.translate('en')
+                return await asyncio.to_thread(transcript.fetch)
+        
+        # If none of preferred languages found, use first available transcript
+        if generated_transcripts:
+            transcript = transcript_list.find_generated_transcript([generated_transcripts[0]])
+            return await asyncio.to_thread(transcript.translate('en').fetch)
+        
+        if manual_transcripts:
+            transcript = transcript_list.find_manually_created_transcript([manual_transcripts[0]])
+            return await asyncio.to_thread(transcript.translate('en').fetch)
+            
+        raise Exception("No available transcripts found")
+        
+    except Exception as e:
+        logger.error({
+            "event": "transcript_fetch_error",
+            "error": str(e),
+            "video_id": video_id,
+            "error_type": type(e).__name__
+        })
+        raise
+
 @app.route('/transcript', methods=['GET'])
 @require_api_key
 async def get_transcript():
@@ -122,11 +181,7 @@ async def get_transcript():
             "video_id": video_id
         })
         
-        transcript_parts = await asyncio.to_thread(
-            YouTubeTranscriptApi.get_transcript,
-            video_id,
-            proxies=PROXY_CONFIG,
-        )
+        transcript_parts = await get_best_transcript(video_id, proxies=PROXY_CONFIG)
         
         full_transcript = ' '.join(part['text'] for part in transcript_parts)
         
